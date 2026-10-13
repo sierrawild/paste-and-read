@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paste & Read</title>
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --border: #c9c9c9; --btn: #f1f1f1; --accent: #2563eb;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161616; --fg: #ececec; --muted: #9a9a9a; --border: #444; --btn: #262626; --accent: #6aa0ff;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161616; --fg: #ececec; --muted: #9a9a9a; --border: #444; --btn: #262626; --accent: #6aa0ff;
+    color-scheme: dark;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body { background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; }
+  textarea { width: 100%; height: 250px; font-size: 16px; padding: 10px; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 10px; }
+  button { padding: 10px 18px; font-size: 16px; background: var(--btn); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  label { display: flex; align-items: center; gap: 6px; }
+  select { max-width: 100%; padding: 6px; background: var(--btn); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; }
+  #status { color: var(--muted); margin-top: 12px; min-height: 1.2em; }
+</style>
+</head>
+<body>
+  <h2>Paste text and listen</h2>
+  <textarea id="text" placeholder="Paste your text here..."></textarea>
+  <div class="row">
+    <button id="readBtn">Read</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="stopBtn">Stop</button>
+  </div>
+  <div class="row">
+    <label>Speed: <input type="range" id="rate" min="0.5" max="2" step="0.1" value="1"> <span id="rateVal">1.0x</span></label>
+    <label>Voice: <select id="voices"></select></label>
+  </div>
+  <div id="status"></div>
+
+  <script>
+    const synth = window.speechSynthesis;
+    const $ = id => document.getElementById(id);
+    const voiceSel = $('voices'), rateEl = $('rate'), pauseBtn = $('pauseBtn'), statusEl = $('status');
+
+    let voices = [];
+    let chunks = [], idx = 0, session = 0;
+    let paused = false, needsRestart = false;
+
+    function store(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+    function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+
+    // Voices: sorted so the user's language comes first, with a sensible default selected
+    function loadVoices() {
+      const all = synth.getVoices();
+      if (!all.length) return;
+      const lang = (navigator.language || 'en').toLowerCase();
+      const base = lang.split('-')[0];
+      const rank = v => {
+        const l = v.lang.toLowerCase();
+        return l === lang ? 0 : l.startsWith(base) ? 1 : 2;
+      };
+      voices = all.slice().sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+      voiceSel.innerHTML = '';
+      voices.forEach((v, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `${v.name} (${v.lang})`;
+        voiceSel.appendChild(opt);
+      });
+      const saved = load('pr_voice');
+      const savedIdx = voices.findIndex(v => v.voiceURI === saved);
+      const defIdx = voices.findIndex(v => v.default && rank(v) < 2);
+      voiceSel.value = savedIdx >= 0 ? savedIdx : defIdx >= 0 ? defIdx : 0;
+    }
+    loadVoices();
+    synth.addEventListener('voiceschanged', loadVoices);
+    // Some browsers fire the event late or not at all, so retry briefly
+    let tries = 0;
+    const poll = setInterval(() => {
+      if (voices.length || ++tries > 20) return clearInterval(poll);
+      loadVoices();
+    }, 250);
+
+    // Split into sentences, then break any very long sentence further.
+    // Short utterances avoid the Chrome bug where long speech cuts out.
+    function splitText(text) {
+      const sentences = text.replace(/\r/g, '').match(/[^.!?\n]+[.!?]*["')\]]*\s*|\n+/g) || [];
+      const out = [];
+      for (let s of sentences) {
+        s = s.trim();
+        if (!s) continue;
+        while (s.length > 180) {
+          let cut = s.lastIndexOf(',', 180);
+          if (cut < 60) cut = s.lastIndexOf(' ', 180);
+          if (cut < 1) cut = 180;
+          out.push(s.slice(0, cut + 1).trim());
+          s = s.slice(cut + 1).trim();
+        }
+        if (s) out.push(s);
+      }
+      return out;
+    }
+
+    function setStatus() {
+      if (!chunks.length) { statusEl.textContent = ''; return; }
+      const n = Math.min(idx + 1, chunks.length);
+      statusEl.textContent = (paused ? 'Paused' : synth.speaking ? 'Reading' : 'Done') + `: sentence ${n} of ${chunks.length}`;
+    }
+
+    function speakNext(sid) {
+      if (sid !== session) return;
+      if (idx >= chunks.length) { setStatus(); pauseBtn.textContent = 'Pause'; return; }
+      const u = new SpeechSynthesisUtterance(chunks[idx]);
+      const v = voices[voiceSel.value];
+      if (v) { u.voice = v; u.lang = v.lang; }
+      u.rate = parseFloat(rateEl.value);
+      u.onend = () => { if (sid !== session) return; idx++; speakNext(sid); };
+      u.onerror = e => {
+        if (sid !== session || e.error === 'canceled' || e.error === 'interrupted') return;
+        idx++; speakNext(sid);
+      };
+      synth.speak(u);
+      setStatus();
+    }
+
+    function playFrom(i) {
+      session++;
+      synth.cancel();
+      paused = false; needsRestart = false;
+      pauseBtn.textContent = 'Pause';
+      idx = i;
+      speakNext(session);
+    }
+
+    function speak() {
+      const text = $('text').value;
+      if (!text.trim()) return;
+      chunks = splitText(text);
+      playFrom(0);
+    }
+
+    function stop() {
+      session++;
+      synth.cancel();
+      paused = false; needsRestart = false; idx = 0; chunks = [];
+      pauseBtn.textContent = 'Pause';
+      statusEl.textContent = '';
+    }
+
+    function togglePause() {
+      if (!chunks.length) return;
+      if (paused) {
+        if (needsRestart) playFrom(idx);
+        else { synth.resume(); paused = false; pauseBtn.textContent = 'Pause'; setStatus(); }
+      } else if (synth.speaking) {
+        synth.pause(); paused = true; pauseBtn.textContent = 'Resume'; setStatus();
+      }
+    }
+
+    // Live speed: updates the label, and restarts the current sentence at the new rate
+    rateEl.addEventListener('input', () => {
+      $('rateVal').textContent = parseFloat(rateEl.value).toFixed(1) + 'x';
+      store('pr_rate', rateEl.value);
+      if (!chunks.length || idx >= chunks.length) return;
+      if (paused) needsRestart = true;
+      else if (synth.speaking) playFrom(idx);
+    });
+
+    voiceSel.addEventListener('change', () => {
+      const v = voices[voiceSel.value];
+      if (v) store('pr_voice', v.voiceURI);
+      if (chunks.length && idx < chunks.length) {
+        if (paused) needsRestart = true;
+        else if (synth.speaking) playFrom(idx);
+      }
+    });
+
+    $('readBtn').addEventListener('click', speak);
+    pauseBtn.addEventListener('click', togglePause);
+    $('stopBtn').addEventListener('click', stop);
+    window.addEventListener('beforeunload', () => synth.cancel());
+
+    const savedRate = load('pr_rate');
+    if (savedRate) { rateEl.value = savedRate; $('rateVal').textContent = parseFloat(savedRate).toFixed(1) + 'x'; }
+    if (!('speechSynthesis' in window)) statusEl.textContent = 'Speech synthesis is not supported in this browser.';
+  </script>
+</body>
+</html>

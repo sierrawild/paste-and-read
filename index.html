@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Paste & Read</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --bg: #f8f9fa; --card: #fff; --text: #222; --accent: #2563eb; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #121212; --card: #1e1e1e; --text: #eee; --accent: #60a5fa; }
+    }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+    .container { max-width: 760px; margin: 0 auto; background: var(--card); padding: 24px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+    h1 { margin-top: 0; font-size: 1.6rem; }
+    textarea { width: 100%; height: 220px; font-size: 1.05rem; padding: 12px; border: 1px solid #ccc; border-radius: 8px; resize: vertical; font-family: inherit; }
+    .dyslexia { font-family: "OpenDyslexic", "Comic Sans MS", sans-serif; }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; align-items: center; }
+    button { padding: 10px 16px; font-size: 1rem; border: none; border-radius: 8px; background: var(--accent); color: white; cursor: pointer; }
+    button.secondary { background: #6b7280; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    label { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; }
+    select, input[type="range"] { font-size: 1rem; }
+    #status { margin: 10px 0; font-size: 0.95rem; min-height: 1.2em; opacity: 0.8; }
+    #highlight-box { margin-top: 16px; padding: 12px; background: #f1f5f9; border-radius: 8px; min-height: 40px; line-height: 1.5; }
+    .current { background: #fef08a; padding: 0 2px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Paste & Read</h1>
+    <textarea id="text" placeholder="Paste your text here..."></textarea>
+
+    <div class="controls">
+      <button id="play">Play</button>
+      <button id="pause" class="secondary" disabled>Pause</button>
+      <button id="stop" class="secondary">Stop</button>
+      <button id="clear" class="secondary">Clear</button>
+      <label><input type="checkbox" id="dyslexia"> Dyslexia font</label>
+    </div>
+
+    <div class="controls">
+      <label>Speed: <input type="range" id="rate" min="0.5" max="2.5" step="0.1" value="1"> <span id="rate-val">1.0</span></label>
+      <label>Voice: <select id="voices"></select></label>
+    </div>
+
+    <div id="status">Ready</div>
+    <div id="highlight-box"></div>
+  </div>
+
+  <script>
+    const synth = window.speechSynthesis;
+    const textEl = document.getElementById('text');
+    const playBtn = document.getElementById('play');
+    const pauseBtn = document.getElementById('pause');
+    const stopBtn = document.getElementById('stop');
+    const clearBtn = document.getElementById('clear');
+    const voicesSel = document.getElementById('voices');
+    const rateEl = document.getElementById('rate');
+    const rateVal = document.getElementById('rate-val');
+    const statusEl = document.getElementById('status');
+    const highlightBox = document.getElementById('highlight-box');
+    const dyslexiaCheck = document.getElementById('dyslexia');
+
+    let voices = [];
+    let sentences = [];
+    let currentIndex = 0;
+    let isPaused = false;
+    let isSpeaking = false;
+
+    function loadVoices() {
+      voices = synth.getVoices();
+      voicesSel.innerHTML = '';
+      voices.forEach((v, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = `${v.name} (${v.lang})`;
+        voicesSel.appendChild(opt);
+      });
+      const saved = localStorage.getItem('tts-voice');
+      if (saved && voices[saved]) voicesSel.value = saved;
+    }
+    loadVoices();
+    if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
+
+    rateEl.oninput = () => {
+      rateVal.textContent = parseFloat(rateEl.value).toFixed(1);
+      localStorage.setItem('tts-rate', rateEl.value);
+    };
+    const savedRate = localStorage.getItem('tts-rate');
+    if (savedRate) { rateEl.value = savedRate; rateVal.textContent = parseFloat(savedRate).toFixed(1); }
+
+    voicesSel.onchange = () => localStorage.setItem('tts-voice', voicesSel.value);
+    dyslexiaCheck.onchange = () => textEl.classList.toggle('dyslexia', dyslexiaCheck.checked);
+
+    function splitSentences(text) {
+      return text.match(/[^.!?]+[.!?]*\s*/g) || [text];
+    }
+
+    function updateHighlight() {
+      highlightBox.innerHTML = sentences.map((s, i) =>
+        `<span class="${i === currentIndex ? 'current' : ''}">${s}</span>`
+      ).join('');
+    }
+
+    function speakFrom(index) {
+      if (index >= sentences.length) {
+        finish();
+        return;
+      }
+      currentIndex = index;
+      const utter = new SpeechSynthesisUtterance(sentences[index].trim());
+      const voiceIdx = voicesSel.value;
+      if (voices[voiceIdx]) utter.voice = voices[voiceIdx];
+      utter.rate = parseFloat(rateEl.value);
+
+      utter.onstart = () => {
+        isSpeaking = true;
+        isPaused = false;
+        updateHighlight();
+        statusEl.textContent = `Reading sentence ${index + 1} of ${sentences.length}`;
+        playBtn.disabled = true;
+        pauseBtn.disabled = false;
+        pauseBtn.textContent = 'Pause';
+      };
+
+      utter.onend = () => {
+        isSpeaking = false;
+        if (!isPaused) {
+          setTimeout(() => speakFrom(index + 1), 50);
+        }
+      };
+
+      utter.onerror = (e) => {
+        isSpeaking = false;
+        if (e.error !== 'interrupted' && e.error !== 'canceled') {
+          statusEl.textContent = 'Error';
+        }
+      };
+
+      synth.speak(utter);
+    }
+
+    function finish() {
+      isSpeaking = false;
+      isPaused = false;
+      playBtn.disabled = false;
+      pauseBtn.disabled = true;
+      pauseBtn.textContent = 'Pause';
+      statusEl.textContent = 'Finished';
+    }
+
+    function start() {
+      stop(false);
+      const text = textEl.value.trim();
+      if (!text) return;
+      sentences = splitSentences(text);
+      currentIndex = 0;
+      isPaused = false;
+      speakFrom(0);
+    }
+
+    function pauseResume() {
+      if (isPaused) {
+        // Resume: restart current sentence
+        isPaused = false;
+        pauseBtn.textContent = 'Pause';
+        statusEl.textContent = `Resuming sentence ${currentIndex + 1}`;
+        setTimeout(() => speakFrom(currentIndex), 100);
+      } else if (isSpeaking || synth.speaking) {
+        // Pause
+        isPaused = true;
+        isSpeaking = false;
+        synth.cancel();
+        pauseBtn.textContent = 'Resume';
+        statusEl.textContent = 'Paused';
+      }
+    }
+
+    function stop(resetStatus = true) {
+      synth.cancel();
+      isSpeaking = false;
+      isPaused = false;
+      playBtn.disabled = false;
+      pauseBtn.disabled = true;
+      pauseBtn.textContent = 'Pause';
+      if (resetStatus) {
+        statusEl.textContent = 'Stopped';
+        highlightBox.innerHTML = '';
+        currentIndex = 0;
+      }
+    }
+
+    playBtn.onclick = start;
+    pauseBtn.onclick = pauseResume;
+    stopBtn.onclick = () => stop(true);
+    clearBtn.onclick = () => { textEl.value = ''; stop(true); statusEl.textContent = 'Ready'; };
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'TEXTAREA') return;
+      if (e.code === 'Space') { e.preventDefault(); pauseResume(); }
+      if (e.code === 'Escape') stop(true);
+    });
+  </script>
+</body>
+</html>
