@@ -1,205 +1,230 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Paste & Read</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    :root { --bg: #f8f9fa; --card: #fff; --text: #222; --accent: #2563eb; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg: #121212; --card: #1e1e1e; --text: #eee; --accent: #60a5fa; }
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Paste & Read</title>
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --border: #c9c9c9; --btn: #f1f1f1; --accent: #2563eb;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161616; --fg: #ececec; --muted: #9a9a9a; --border: #444; --btn: #262626; --accent: #6aa0ff;
+      color-scheme: dark;
     }
-    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
-    .container { max-width: 760px; margin: 0 auto; background: var(--card); padding: 24px; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-    h1 { margin-top: 0; font-size: 1.6rem; }
-    textarea { width: 100%; height: 220px; font-size: 1.05rem; padding: 12px; border: 1px solid #ccc; border-radius: 8px; resize: vertical; font-family: inherit; }
-    .dyslexia { font-family: "OpenDyslexic", "Comic Sans MS", sans-serif; }
-    .controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0; align-items: center; }
-    button { padding: 10px 16px; font-size: 1rem; border: none; border-radius: 8px; background: var(--accent); color: white; cursor: pointer; }
-    button.secondary { background: #6b7280; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    label { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; }
-    select, input[type="range"] { font-size: 1rem; }
-    #status { margin: 10px 0; font-size: 0.95rem; min-height: 1.2em; opacity: 0.8; }
-    #highlight-box { margin-top: 16px; padding: 12px; background: #f1f5f9; border-radius: 8px; min-height: 40px; line-height: 1.5; }
-    .current { background: #fef08a; padding: 0 2px; border-radius: 3px; }
-  </style>
+  }
+  :root[data-theme="dark"] {
+    --bg: #161616; --fg: #ececec; --muted: #9a9a9a; --border: #444; --btn: #262626; --accent: #6aa0ff;
+    color-scheme: dark;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body { background: var(--bg); color: var(--fg); font-family: system-ui, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; }
+  textarea { width: 100%; height: 250px; font-size: 16px; padding: 10px; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 10px; }
+  button { padding: 10px 18px; font-size: 16px; background: var(--btn); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: 0.45; cursor: default; }
+  label { display: flex; align-items: center; gap: 6px; }
+  select { max-width: 100%; padding: 6px; background: var(--btn); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; }
+  #status { color: var(--muted); margin-top: 12px; min-height: 1.2em; }
+  #now { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; line-height: 1.45; display: none; }
+  #now.show { display: block; }
+</style>
 </head>
 <body>
-  <div class="container">
-    <h1>Paste & Read</h1>
-    <textarea id="text" placeholder="Paste your text here..."></textarea>
-
-    <div class="controls">
-      <button id="play">Play</button>
-      <button id="pause" class="secondary" disabled>Pause</button>
-      <button id="stop" class="secondary">Stop</button>
-      <button id="clear" class="secondary">Clear</button>
-      <label><input type="checkbox" id="dyslexia"> Dyslexia font</label>
-    </div>
-
-    <div class="controls">
-      <label>Speed: <input type="range" id="rate" min="0.5" max="2.5" step="0.1" value="1"> <span id="rate-val">1.0</span></label>
-      <label>Voice: <select id="voices"></select></label>
-    </div>
-
-    <div id="status">Ready</div>
-    <div id="highlight-box"></div>
+  <h2>Paste text and listen</h2>
+  <textarea id="text" placeholder="Paste your text here..."></textarea>
+  <div class="row">
+    <button id="mainBtn">Read</button>
+    <button id="stopBtn">Stop</button>
+    <button id="backBtn">Back</button>
+    <button id="nextBtn">Next</button>
   </div>
-
+  <div class="row">
+    <label>Speed: <input type="range" id="rate" min="0.5" max="2.5" step="0.1" value="1"> <span id="rateVal">1.0x</span></label>
+    <label>Voice: <select id="voices"></select></label>
+  </div>
+  <div id="status"></div>
+  <div id="now"></div>
   <script>
     const synth = window.speechSynthesis;
-    const textEl = document.getElementById('text');
-    const playBtn = document.getElementById('play');
-    const pauseBtn = document.getElementById('pause');
-    const stopBtn = document.getElementById('stop');
-    const clearBtn = document.getElementById('clear');
-    const voicesSel = document.getElementById('voices');
-    const rateEl = document.getElementById('rate');
-    const rateVal = document.getElementById('rate-val');
-    const statusEl = document.getElementById('status');
-    const highlightBox = document.getElementById('highlight-box');
-    const dyslexiaCheck = document.getElementById('dyslexia');
-
+    const $ = id => document.getElementById(id);
+    const voiceSel = $('voices'), rateEl = $('rate'), mainBtn = $('mainBtn'), statusEl = $('status'), nowEl = $('now');
     let voices = [];
-    let sentences = [];
-    let currentIndex = 0;
-    let isPaused = false;
-    let isSpeaking = false;
-
+    let chunks = [], idx = 0, session = 0;
+    let paused = false;
+    function store(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+    function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
     function loadVoices() {
-      voices = synth.getVoices();
-      voicesSel.innerHTML = '';
+      const all = synth.getVoices();
+      if (!all.length) return;
+      const lang = (navigator.language || 'en').toLowerCase();
+      const base = lang.split('-')[0];
+      const rank = v => {
+        const l = v.lang.toLowerCase();
+        return l === lang ? 0 : l.startsWith(base) ? 1 : 2;
+      };
+      voices = all.slice().sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+      voiceSel.innerHTML = '';
       voices.forEach((v, i) => {
         const opt = document.createElement('option');
         opt.value = i;
         opt.textContent = `${v.name} (${v.lang})`;
-        voicesSel.appendChild(opt);
+        voiceSel.appendChild(opt);
       });
-      const saved = localStorage.getItem('tts-voice');
-      if (saved && voices[saved]) voicesSel.value = saved;
+      const saved = load('pr_voice');
+      const savedIdx = voices.findIndex(v => v.voiceURI === saved);
+      const defIdx = voices.findIndex(v => v.default && rank(v) < 2);
+      voiceSel.value = savedIdx >= 0 ? savedIdx : defIdx >= 0 ? defIdx : 0;
     }
     loadVoices();
-    if (speechSynthesis.onvoiceschanged !== undefined) speechSynthesis.onvoiceschanged = loadVoices;
-
-    rateEl.oninput = () => {
-      rateVal.textContent = parseFloat(rateEl.value).toFixed(1);
-      localStorage.setItem('tts-rate', rateEl.value);
-    };
-    const savedRate = localStorage.getItem('tts-rate');
-    if (savedRate) { rateEl.value = savedRate; rateVal.textContent = parseFloat(savedRate).toFixed(1); }
-
-    voicesSel.onchange = () => localStorage.setItem('tts-voice', voicesSel.value);
-    dyslexiaCheck.onchange = () => textEl.classList.toggle('dyslexia', dyslexiaCheck.checked);
-
-    function splitSentences(text) {
-      return text.match(/[^.!?]+[.!?]*\s*/g) || [text];
+    synth.addEventListener('voiceschanged', loadVoices);
+    let tries = 0;
+    const poll = setInterval(() => {
+      if (voices.length || ++tries > 20) return clearInterval(poll);
+      loadVoices();
+    }, 250);
+    function splitText(text) {
+      const sentences = text.replace(/\r/g, '').match(/[^.!?\n]+[.!?]*["')\]]*\s*|\n+/g) || [];
+      const out = [];
+      for (let s of sentences) {
+        s = s.trim();
+        if (!s) continue;
+        while (s.length > 180) {
+          let cut = s.lastIndexOf(',', 180);
+          if (cut < 60) cut = s.lastIndexOf(' ', 180);
+          if (cut < 1) cut = 180;
+          out.push(s.slice(0, cut + 1).trim());
+          s = s.slice(cut + 1).trim();
+        }
+        if (s) out.push(s);
+      }
+      return out;
     }
-
-    function updateHighlight() {
-      highlightBox.innerHTML = sentences.map((s, i) =>
-        `<span class="${i === currentIndex ? 'current' : ''}">${s}</span>`
-      ).join('');
+    function labelMain() {
+      if (!chunks.length || idx >= chunks.length) mainBtn.textContent = 'Read';
+      else if (paused) mainBtn.textContent = 'Resume';
+      else mainBtn.textContent = 'Pause';
     }
-
-    function speakFrom(index) {
-      if (index >= sentences.length) {
-        finish();
+    function setStatus() {
+      if (!chunks.length) {
+        statusEl.textContent = '';
+        nowEl.className = '';
+        nowEl.textContent = '';
+        labelMain();
+        $('backBtn').disabled = true;
+        $('nextBtn').disabled = true;
         return;
       }
-      currentIndex = index;
-      const utter = new SpeechSynthesisUtterance(sentences[index].trim());
-      const voiceIdx = voicesSel.value;
-      if (voices[voiceIdx]) utter.voice = voices[voiceIdx];
-      utter.rate = parseFloat(rateEl.value);
-
-      utter.onstart = () => {
-        isSpeaking = true;
-        isPaused = false;
-        updateHighlight();
-        statusEl.textContent = `Reading sentence ${index + 1} of ${sentences.length}`;
-        playBtn.disabled = true;
-        pauseBtn.disabled = false;
-        pauseBtn.textContent = 'Pause';
+      const done = idx >= chunks.length;
+      const n = Math.min(idx + 1, chunks.length);
+      statusEl.textContent = (done ? 'Done' : paused ? 'Paused' : 'Reading') + `: sentence ${n} of ${chunks.length}`;
+      nowEl.className = 'show';
+      nowEl.textContent = done ? 'End of text' : chunks[idx];
+      $('backBtn').disabled = idx <= 0 && !done;
+      $('nextBtn').disabled = done;
+      labelMain();
+    }
+    function speakNext(sid) {
+      if (sid !== session) return;
+      if (idx >= chunks.length) { paused = false; setStatus(); return; }
+      const u = new SpeechSynthesisUtterance(chunks[idx]);
+      const v = voices[voiceSel.value];
+      if (v) { u.voice = v; u.lang = v.lang; }
+      u.rate = parseFloat(rateEl.value);
+      u.onend = () => { if (sid !== session) return; idx++; speakNext(sid); };
+      u.onerror = e => {
+        if (sid !== session || e.error === 'canceled' || e.error === 'interrupted') return;
+        idx++; speakNext(sid);
       };
-
-      utter.onend = () => {
-        isSpeaking = false;
-        if (!isPaused) {
-          setTimeout(() => speakFrom(index + 1), 50);
-        }
-      };
-
-      utter.onerror = (e) => {
-        isSpeaking = false;
-        if (e.error !== 'interrupted' && e.error !== 'canceled') {
-          statusEl.textContent = 'Error';
-        }
-      };
-
-      synth.speak(utter);
+      synth.speak(u);
+      if (synth.paused) synth.resume();
+      setStatus();
     }
-
-    function finish() {
-      isSpeaking = false;
-      isPaused = false;
-      playBtn.disabled = false;
-      pauseBtn.disabled = true;
-      pauseBtn.textContent = 'Pause';
-      statusEl.textContent = 'Finished';
-    }
-
-    function start() {
-      stop(false);
-      const text = textEl.value.trim();
-      if (!text) return;
-      sentences = splitSentences(text);
-      currentIndex = 0;
-      isPaused = false;
-      speakFrom(0);
-    }
-
-    function pauseResume() {
-      if (isPaused) {
-        // Resume: restart current sentence
-        isPaused = false;
-        pauseBtn.textContent = 'Pause';
-        statusEl.textContent = `Resuming sentence ${currentIndex + 1}`;
-        setTimeout(() => speakFrom(currentIndex), 100);
-      } else if (isSpeaking || synth.speaking) {
-        // Pause
-        isPaused = true;
-        isSpeaking = false;
-        synth.cancel();
-        pauseBtn.textContent = 'Resume';
-        statusEl.textContent = 'Paused';
-      }
-    }
-
-    function stop(resetStatus = true) {
+    function playFrom(i) {
+      if (!chunks.length) return;
+      session++;
       synth.cancel();
-      isSpeaking = false;
-      isPaused = false;
-      playBtn.disabled = false;
-      pauseBtn.disabled = true;
-      pauseBtn.textContent = 'Pause';
-      if (resetStatus) {
-        statusEl.textContent = 'Stopped';
-        highlightBox.innerHTML = '';
-        currentIndex = 0;
+      paused = false;
+      idx = Math.max(0, Math.min(i, chunks.length - 1));
+      speakNext(session);
+    }
+    function speak() {
+      const text = $('text').value;
+      if (!text.trim()) return;
+      chunks = splitText(text);
+      playFrom(0);
+    }
+    function stop() {
+      session++;
+      synth.cancel();
+      paused = false; idx = 0; chunks = [];
+      setStatus();
+    }
+    function togglePause() {
+      if (!chunks.length || idx >= chunks.length) return;
+      if (paused) playFrom(idx);
+      else {
+        session++;
+        synth.cancel();
+        paused = true;
+        setStatus();
       }
     }
-
-    playBtn.onclick = start;
-    pauseBtn.onclick = pauseResume;
-    stopBtn.onclick = () => stop(true);
-    clearBtn.onclick = () => { textEl.value = ''; stop(true); statusEl.textContent = 'Ready'; };
-
-    document.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'TEXTAREA') return;
-      if (e.code === 'Space') { e.preventDefault(); pauseResume(); }
-      if (e.code === 'Escape') stop(true);
+    function onMain() {
+      if (!chunks.length || idx >= chunks.length) speak();
+      else togglePause();
+    }
+    function skip(delta) {
+      if (!chunks.length) return;
+      if (idx >= chunks.length && delta > 0) return;
+      const base = idx >= chunks.length ? chunks.length : idx;
+      const target = base + delta;
+      if (target >= chunks.length) {
+        session++;
+        synth.cancel();
+        paused = false;
+        idx = chunks.length;
+        setStatus();
+        return;
+      }
+      playFrom(Math.max(0, target));
+    }
+    rateEl.addEventListener('input', () => {
+      $('rateVal').textContent = parseFloat(rateEl.value).toFixed(1) + 'x';
+      store('pr_rate', rateEl.value);
+      if (!chunks.length || idx >= chunks.length || paused) return;
+      if (synth.speaking) playFrom(idx);
     });
+    voiceSel.addEventListener('change', () => {
+      const v = voices[voiceSel.value];
+      if (v) store('pr_voice', v.voiceURI);
+      if (chunks.length && idx < chunks.length && !paused && synth.speaking) playFrom(idx);
+    });
+    mainBtn.addEventListener('click', onMain);
+    $('stopBtn').addEventListener('click', stop);
+    $('backBtn').addEventListener('click', () => skip(-1));
+    $('nextBtn').addEventListener('click', () => skip(1));
+    document.addEventListener('keydown', e => {
+      if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+      if (e.code === 'Space') { e.preventDefault(); onMain(); }
+      else if (e.code === 'Escape') stop();
+      else if (e.code === 'ArrowRight') { e.preventDefault(); skip(1); }
+      else if (e.code === 'ArrowLeft') { e.preventDefault(); skip(-1); }
+    });
+    window.addEventListener('beforeunload', () => synth.cancel());
+    const savedRate = load('pr_rate');
+    if (savedRate && savedRate <= 2.5 && savedRate >= 0.5) {
+      rateEl.value = savedRate;
+      $('rateVal').textContent = parseFloat(savedRate).toFixed(1) + 'x';
+    }
+    setStatus();
+    if (!('speechSynthesis' in window)) statusEl.textContent = 'Speech synthesis is not supported in this browser.';
   </script>
 </body>
 </html>
