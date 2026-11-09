@@ -43,13 +43,6 @@ No uploads, no complex settings, and no unnecessary distractions.
 I'm neurodivergent but love written word, and my work requires me to read lots of reports 😜
 
 
-## Technologies Used
-
-- HTML
-- CSS
-- JavaScript
-- Web Speech API
-
 ## Accessibility
 
 Paste & Read aims to be accessible and easy to use:
@@ -80,21 +73,16 @@ Contributions, feature requests, and bug reports are welcome.
 - [x] Voice selection
 - [ ] Manual light/dark mode toggle
 - [x] Sentence highlighting during playback
-- [ ] Additional accessible fonts 
+- [ ] Additional accessible fonts
 
-## License
+      
+## Technologies Used
 
-This project is licensed under the MIT License.
+- HTML
+- CSS
+- JavaScript
+- Web Speech API
+## AI Usage Disclosure
 
-## Support
-
-If you find this project useful, please consider:
-
-- Starring the repository
-- Reporting bugs
-- Suggesting new features
-- Sharing it with others who may benefit from it
-
----
-
-Made with ❤️ to make reading more accessible.
+Most of the code in this repository was generated with the assistance of AI.
+This repository is published because it is a useful tool that I actively use, maintain, and improve.
