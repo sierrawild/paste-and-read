@@ -9,12 +9,12 @@ https://sierrawild.github.io/paste-and-read/
 
 ## Features
 
-- 🎧 Instant text-to-speech
-- 📋 Paste any content
-- ⚡ No account required
-- 🌐 Runs entirely in the browser
-- ♿ Helpful for users with dyslexia, ADHD, visual impairments, or reading difficulties
-- 📱 Works on desktop and mobile devices
+- Instant text-to-speech
+- Paste any content
+- No account required
+- Runs entirely in the browser
+- Helpful for users with dyslexia, ADHD, visual impairments, or reading difficulties
+- Works on desktop and mobile devices
 
 ## Keyboard Shortcuts
 
